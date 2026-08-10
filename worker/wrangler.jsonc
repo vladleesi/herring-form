@@ -4,12 +4,51 @@
   "compatibility_date": "2026-08-09",
   "workers_dev": true,
   "preview_urls": false,
-  "vars": {
-    "FROM_EMAIL": "Measure & Send <no-reply@mail.vladleesi.dev>",
-    "EMAIL_SUBJECT": "New measurement request",
-    "ALLOWED_ORIGINS": "http://127.0.0.1:8765,https://vladleesi.github.io,https://vladleesi.dev"
+  "observability": {
+    "enabled": true
   },
+  "vars": {
+    "DELIVERY_MODE": "live",
+    "EMAIL_SUBJECT": "New measurement request",
+    "ALLOWED_ORIGINS": "https://vladleesi.github.io,https://vladleesi.dev"
+  },
+  "ratelimits": [
+    {
+      "name": "SUBMISSION_RATE_LIMITER",
+      "namespace_id": "834761001",
+      "simple": {
+        "limit": 3,
+        "period": 60
+      }
+    }
+  ],
   "secrets": {
-    "required": ["RESEND_API_KEY", "TURNSTILE_SECRET_KEY", "RECIPIENT_EMAIL"]
+    "required": ["RESEND_API_KEY", "TURNSTILE_SECRET_KEY", "RECIPIENT_EMAIL", "SENDER_EMAIL"]
+  },
+  "env": {
+    "dev": {
+      "name": "measurement-email-api-dev",
+      "workers_dev": true,
+      "preview_urls": false,
+      "routes": [],
+      "vars": {
+        "DELIVERY_MODE": "mock",
+        "EMAIL_SUBJECT": "[DEV] New measurement request",
+        "ALLOWED_ORIGINS": "http://127.0.0.1:8765,http://localhost:8765"
+      },
+      "ratelimits": [
+        {
+          "name": "SUBMISSION_RATE_LIMITER",
+          "namespace_id": "834761002",
+          "simple": {
+            "limit": 3,
+            "period": 60
+          }
+        }
+      ],
+      "secrets": {
+        "required": ["TURNSTILE_SECRET_KEY"]
+      }
+    }
   }
 }
