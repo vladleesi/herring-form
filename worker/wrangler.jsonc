@@ -6,11 +6,10 @@
   "preview_urls": false,
   "vars": {
     "FROM_EMAIL": "Measure & Send <no-reply@mail.vladleesi.dev>",
-    "RECIPIENT_EMAIL": "contact.vladkochetov@gmail.com",
     "EMAIL_SUBJECT": "New measurement request",
     "ALLOWED_ORIGINS": "http://127.0.0.1:8765,https://vladleesi.github.io,https://vladleesi.dev"
   },
   "secrets": {
-    "required": ["RESEND_API_KEY", "TURNSTILE_SECRET_KEY"]
+    "required": ["RESEND_API_KEY", "TURNSTILE_SECRET_KEY", "RECIPIENT_EMAIL"]
   }
 }
