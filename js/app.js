@@ -227,7 +227,7 @@ function measurementCard(measurementIndex) {
             type="text"
             inputmode="decimal"
             autocomplete="off"
-            placeholder="14.5"
+            placeholder="0.0"
             value="${escapeHtml(record.value)}"
             aria-invalid="${Boolean(state.errors.measurement)}"
             aria-describedby="measurement-error"
