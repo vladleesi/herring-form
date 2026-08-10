@@ -293,6 +293,7 @@ function contactCard() {
       <p class="step-kicker">FINAL STEP</p>
       <h2 tabindex="-1">Send your request</h2>
       <p class="card-subtitle">Add your contact details and an optional message. The completed CSV will be attached to the email.</p>
+      <p class="card-subtitle">Your contact details, message, and measurement CSV are processed by Cloudflare and Resend to deliver the request by email.</p>
 
       <label class="field-label" for="name-input">Your name <span aria-hidden="true">*</span></label>
       <input

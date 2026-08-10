@@ -1,3 +1,9 @@
+worker/.wrangler/
 worker/.dev.vars
 worker/.env
 worker/node_modules/
+.env
+.env.*
+!.env.example
+!**/.env.example
+!worker/.dev.vars.example

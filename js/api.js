@@ -40,5 +40,9 @@ export async function sendCsv({ customer, csv, filename, turnstileToken, config 
     throw new Error(message);
   }
 
-  return { delivered: true, mode: "live" };
+  const result = await response.json().catch(() => ({}));
+
+  return result.mode === "mock"
+    ? { delivered: false, mode: "mock" }
+    : { delivered: true, mode: "live" };
 }
