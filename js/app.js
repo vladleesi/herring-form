@@ -1,28 +1,56 @@
 import { sendCsv } from "./api.js";
 import { CONFIG } from "./config.js";
-import { downloadCsv, generateMeasurementsCsv } from "./csv.js";
+import { createCsvFilename, downloadCsv, generateMeasurementsCsv } from "./csv.js";
 
-const STEPS = ["Length", "Width", "Height", "Review", "Contact"];
-const MEASUREMENT_STEPS = [
-  { key: "length", title: "Length", prompt: "Enter the longest side." },
-  { key: "width", title: "Width", prompt: "Enter the side-to-side measurement." },
-  { key: "height", title: "Height", prompt: "Enter the top-to-bottom measurement." }
+export const MEASUREMENTS = [
+  { imageNumber: 3, name: "@NckCirc", slug: "NckCirc", fullName: "Neck under collar" },
+  { imageNumber: 5, name: "@NckToEarLngth", slug: "NckToEarLngth", fullName: "From the point on her neck under collar to ear" },
+  { imageNumber: 7, name: "@CllrWdth", slug: "CllrWdth", fullName: "Collar width" },
+  { imageNumber: 9, name: "@ChLngthToFL", slug: "ChLngthToFL", fullName: "Chest length from the point on her neck under collar to the point in front of the forepaws" },
+  { imageNumber: 11, name: "@ChLngthToAntAxFld", slug: "ChLngthToAntAxFld", fullName: "Chest length from the point on her neck under collar to anterior axillary folds" },
+  { imageNumber: 13, name: "@LngthBtwnFL", slug: "LngthBtwnFL", fullName: "Distance between the forepaw" },
+  { imageNumber: 15, name: "@AntAxFldCirc", slug: "AntAxFldCirc", fullName: "Anterior axillary folds" },
+  { imageNumber: 17, name: "@AntAxFldToGrndHght", slug: "AntAxFldToGrndHght", fullName: "From the point on the back where anterior axillary folds to the ground" },
+  { imageNumber: 19, name: "@NckToAntAxFldLngth", slug: "NckToAntAxFldLngth", fullName: "From the point on her neck under collar to the point on the back where anterior axillary folds" },
+  { imageNumber: 21, name: "@AntAxFldToTailLngth", slug: "AntAxFldToTailLngth", fullName: "From the point on the back where anterior axillary folds to the point above the tail" },
+  { imageNumber: 23, name: "@NckToGrndHght", slug: "NckToGrndHght", fullName: "From the point on her neck under collar to the ground" },
+  { imageNumber: 25, name: "@LngthOfOutSdFL", slug: "LngthOfOutSdFL", fullName: "Length of outer side of the forepaw" },
+  { imageNumber: 27, name: "@LngthOfInSdFL", slug: "LngthOfInSdFL", fullName: "Length of inner side of the forepaw" },
+  { imageNumber: 29, name: "@LngthBtwnFlds", slug: "LngthBtwnFlds", fullName: "Distance between folds" },
+  { imageNumber: 31, name: "@PstAxFldCirc", slug: "PstAxFldCirc", fullName: "Posterior axillary folds" },
+  { imageNumber: 33, name: "@PstAxFldToGrndHght", slug: "PstAxFldToGrndHght", fullName: "From the point on the back where posterior axillary folds to the ground" },
+  { imageNumber: 35, name: "@LngthOfInSdHL", slug: "LngthOfInSdHL", fullName: "Length of inner side of the hind leg" },
+  { imageNumber: 37, name: "@HLCirc", slug: "HLCirc", fullName: "Upper hind leg circumference" },
+  { imageNumber: 39, name: "@LowFLCirc", slug: "LowFLCirc", fullName: "Lower forepaw circumference" },
+  { imageNumber: 41, name: "@LowHLCirc", slug: "LowHLCirc", fullName: "Lower hind leg circumference" }
 ];
 
-const initialState = () => ({
-  step: 0,
-  measurements: { length: "", width: "", height: "" },
-  customer: { name: "", contactType: "email", contact: "", message: "" },
-  turnstileToken: "",
-  fieldError: "",
-  submission: { status: "idle", message: "", result: null }
-});
+const REVIEW_STEP = MEASUREMENTS.length + 1;
+const CONTACT_STEP = REVIEW_STEP + 1;
+const TOTAL_STEPS = CONTACT_STEP + 1;
 
-let state = initialState();
+function createInitialState() {
+  return {
+    step: 0,
+    dog: { name: "", sex: "", unit: "cm" },
+    measurements: Object.fromEntries(
+      MEASUREMENTS.map(({ slug }) => [slug, { value: "", unit: "" }])
+    ),
+    customer: { name: "", contactType: "email", contact: "", message: "" },
+    turnstileToken: "",
+    submission: { status: "idle", message: "", result: null },
+    errors: {},
+    completed: false
+  };
+}
+
+let state = createInitialState();
 
 const app = document.querySelector("#app");
-const progressList = document.querySelector("#progress-list");
-const progressMobile = document.querySelector("#progress-mobile");
+const progressStep = document.querySelector("#progress-step");
+const progressLabel = document.querySelector("#progress-label");
+const progressTrack = document.querySelector(".progress-track");
+const progressFill = document.querySelector("#progress-fill");
 let turnstileWidgetId = null;
 let turnstileRetryTimer = null;
 
@@ -90,67 +118,169 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function updateProgress() {
-  const displayStep = Math.min(state.step, STEPS.length - 1);
-  progressMobile.textContent = `Step ${displayStep + 1} of ${STEPS.length} — ${STEPS[displayStep]}`;
-  progressList.innerHTML = STEPS.map((label, index) => {
-    const status = index < displayStep ? "is-complete" : index === displayStep ? "is-active" : "";
-    const current = index === displayStep ? ' aria-current="step"' : "";
-    return `<li class="${status}" data-number="${index + 1}"${current}><span>${label}</span></li>`;
-  }).join("");
-}
-
-function measurementCard(stepIndex) {
-  const step = MEASUREMENT_STEPS[stepIndex];
-  const value = escapeHtml(state.measurements[step.key]);
-  const error = escapeHtml(state.fieldError);
+function picture(slug, alt, imageNumber, className = "step-picture") {
+  const desktopPrefix = String(imageNumber).padStart(2, "0");
+  const mobilePrefix = String(imageNumber + 1).padStart(2, "0");
 
   return `
-    <form class="card" id="step-form" novalidate>
-      <p class="step-kicker">Step ${stepIndex + 1} of 5</p>
-      <h2 tabindex="-1">${step.title}</h2>
-      <p class="card-subtitle">${step.prompt}</p>
-      <label class="field-label" for="measurement-input">${step.title} in centimeters</label>
-      <div class="input-wrap">
+    <picture class="${className}">
+      <source media="(max-width: 640px)" srcset="./public/images/measurements/${mobilePrefix}_${slug}_mobile.png">
+      <img src="./public/images/measurements/${desktopPrefix}_${slug}_desktop.png" alt="${escapeHtml(alt)}">
+    </picture>`;
+}
+
+function unitOptions(name, selectedUnit) {
+  return `
+    <div class="choice-group unit-choice" role="radiogroup" aria-label="Unit">
+      ${["cm", "inch"].map((unit) => `
+        <label class="choice-pill">
+          <input type="radio" name="${name}" value="${unit}" ${selectedUnit === unit ? "checked" : ""} required>
+          <span>${unit}</span>
+        </label>`).join("")}
+    </div>`;
+}
+
+function updateProgress() {
+  const visibleStep = state.completed ? TOTAL_STEPS : state.step + 1;
+  let label = "About your dog";
+
+  if (state.step > 0 && state.step <= MEASUREMENTS.length) {
+    label = MEASUREMENTS[state.step - 1].fullName;
+  } else if (state.step === REVIEW_STEP) {
+    label = "Review and confirm";
+  } else if (state.step === CONTACT_STEP) {
+    label = state.completed ? "Request sent" : "Contact and message";
+  }
+
+  progressStep.textContent = state.completed ? "Complete" : `Step ${visibleStep} of ${TOTAL_STEPS}`;
+  progressLabel.textContent = label;
+  progressTrack.setAttribute("aria-valuenow", String(visibleStep));
+  progressFill.style.width = `${(visibleStep / TOTAL_STEPS) * 100}%`;
+}
+
+function aboutCard() {
+  return `
+    <form class="step-card" id="about-form" novalidate>
+      ${picture("21_untitled", "Dog measurement overview", 1)}
+      <div class="step-content">
+        <p class="step-kicker">STEP 1 · ABOUT YOUR DOG</p>
+        <h2 tabindex="-1">Let’s get acquainted</h2>
+        <p class="card-subtitle">Tell us who we’re measuring and choose the unit you’ll use most often.</p>
+
+        <label class="field-label" for="dog-name">Dog’s name</label>
         <input
-          id="measurement-input"
-          name="${step.key}"
-          type="number"
-          min="0"
-          step="any"
-          inputmode="decimal"
-          value="${value}"
-          required
-          aria-describedby="field-error"
-          aria-invalid="${Boolean(state.fieldError)}"
+          class="text-input"
+          id="dog-name"
+          name="dogName"
+          type="text"
+          maxlength="50"
           autocomplete="off"
+          value="${escapeHtml(state.dog.name)}"
+          aria-invalid="${Boolean(state.errors.name)}"
+          aria-describedby="dog-name-error"
+          required
         >
-        <span class="unit" aria-hidden="true">cm</span>
-      </div>
-      <p class="field-error" id="field-error">${error}</p>
-      <div class="actions">
-        ${stepIndex > 0 ? '<button class="button button-secondary" type="button" data-action="back">Back</button>' : ""}
-        <button class="button button-primary" type="submit">Continue</button>
+        <p class="field-error" id="dog-name-error">${escapeHtml(state.errors.name || "")}</p>
+
+        <fieldset class="field-group">
+          <legend class="field-label">Sex</legend>
+          <div class="choice-group">
+            ${["male", "female"].map((sex) => `
+              <label class="choice-pill">
+                <input type="radio" name="sex" value="${sex}" ${state.dog.sex === sex ? "checked" : ""} required>
+                <span>${sex[0].toUpperCase()}${sex.slice(1)}</span>
+              </label>`).join("")}
+          </div>
+          <p class="field-error">${escapeHtml(state.errors.sex || "")}</p>
+        </fieldset>
+
+        <fieldset class="field-group compact-field-group">
+          <legend class="field-label">Main unit</legend>
+          ${unitOptions("mainUnit", state.dog.unit)}
+        </fieldset>
+
+        <div class="actions">
+          <button class="button button-primary" type="submit">Start measuring <span aria-hidden="true">→</span></button>
+        </div>
       </div>
     </form>`;
 }
 
-function confirmationCard() {
-  const rows = MEASUREMENT_STEPS.map(({ key, title }) => `
-    <div class="measurement-row">
-      <dt>${title}</dt>
-      <dd>${escapeHtml(state.measurements[key])} cm</dd>
-    </div>`).join("");
+function measurementCard(measurementIndex) {
+  const measurement = MEASUREMENTS[measurementIndex];
+  const record = state.measurements[measurement.slug];
+  const selectedUnit = record.unit || state.dog.unit;
 
   return `
-    <section class="card" aria-labelledby="confirm-title">
-      <p class="step-kicker">Step 4 of 5</p>
-      <h2 id="confirm-title" tabindex="-1">Review measurements</h2>
-      <p class="card-subtitle">Check everything before you continue.</p>
-      <dl class="measurements">${rows}</dl>
-      <div class="actions">
-        <button class="button button-secondary" type="button" data-action="back">Back</button>
-        <button class="button button-primary" type="button" data-action="confirm">Continue</button>
+    <form class="step-card" id="measurement-form" novalidate>
+      ${picture(measurement.slug, `Illustration showing how to measure: ${measurement.fullName}`, measurement.imageNumber)}
+      <div class="step-content">
+        <p class="step-kicker">MEASUREMENT ${measurementIndex + 1} OF ${MEASUREMENTS.length}</p>
+        <h2 tabindex="-1">${escapeHtml(measurement.fullName)}</h2>
+        <p class="card-subtitle">Use the highlighted points in the illustration, then enter the result below.</p>
+
+        <label class="field-label" for="measurement-value">Measurement</label>
+        <div class="measurement-input-row">
+          <input
+            class="number-input"
+            id="measurement-value"
+            name="measurementValue"
+            type="number"
+            min="0"
+            step="any"
+            inputmode="decimal"
+            autocomplete="off"
+            placeholder="0.0"
+            value="${escapeHtml(record.value)}"
+            aria-invalid="${Boolean(state.errors.measurement)}"
+            aria-describedby="measurement-error"
+            required
+          >
+          ${unitOptions("measurementUnit", selectedUnit)}
+        </div>
+        <p class="field-error" id="measurement-error">${escapeHtml(state.errors.measurement || "")}</p>
+
+        <div class="actions split-actions">
+          <button class="button button-secondary" type="button" data-action="back"><span aria-hidden="true">←</span> Back</button>
+          <button class="button button-primary" type="submit">Continue <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </form>`;
+}
+
+function reviewCard() {
+  const rows = MEASUREMENTS.map((measurement, index) => {
+    const record = state.measurements[measurement.slug];
+    return `
+      <div class="review-row">
+        <div>
+          <dt>${escapeHtml(measurement.fullName)}</dt>
+          <dd>${escapeHtml(record.value)} ${escapeHtml(record.unit)}</dd>
+        </div>
+        <button class="edit-button" type="button" data-action="edit" data-step="${index + 1}" aria-label="Edit ${escapeHtml(measurement.fullName)}">Edit</button>
+      </div>`;
+  }).join("");
+
+  return `
+    <section class="review-card" aria-labelledby="review-title">
+      <div class="review-header">
+        <div>
+          <p class="step-kicker">REVIEW</p>
+          <h2 id="review-title" tabindex="-1">Check everything</h2>
+          <p class="card-subtitle">Confirm the details below before adding your message and sending the request.</p>
+        </div>
+        <div class="dog-summary">
+          <span class="dog-avatar" aria-hidden="true">${escapeHtml(state.dog.name.charAt(0).toUpperCase())}</span>
+          <div><strong>${escapeHtml(state.dog.name)}</strong><span>${escapeHtml(state.dog.sex)} · main unit: ${escapeHtml(state.dog.unit)}</span></div>
+          <button class="edit-button" type="button" data-action="edit" data-step="0">Edit</button>
+        </div>
+      </div>
+
+      <dl class="review-list">${rows}</dl>
+      <p class="form-error" role="alert">${escapeHtml(state.errors.form || "")}</p>
+      <div class="actions split-actions review-actions">
+        <button class="button button-secondary" type="button" data-action="back"><span aria-hidden="true">←</span> Back</button>
+        <button class="button button-primary" type="button" data-action="confirm">Confirm &amp; continue <span aria-hidden="true">→</span></button>
       </div>
     </section>`;
 }
@@ -159,17 +289,15 @@ function contactCard() {
   const isLoading = state.submission.status === "loading";
   const isConfigured = isLiveEmailConfigured();
   const needsVerification = !CONFIG.mockMode && !state.turnstileToken;
-  const error = escapeHtml(state.fieldError);
-  const submissionMessage = escapeHtml(state.submission.message);
   const isEmail = state.customer.contactType === "email";
 
   return `
-    <form class="card" id="contact-form" novalidate>
-      <p class="step-kicker">Step 5 of 5</p>
-      <h2 tabindex="-1">Your contact details</h2>
-      <p class="card-subtitle">Tell us who you are and how we can reach you.</p>
+    <form class="review-card contact-card" id="contact-form" novalidate>
+      <p class="step-kicker">FINAL STEP</p>
+      <h2 tabindex="-1">Send your request</h2>
+      <p class="card-subtitle">Add your contact details and an optional message. The completed CSV will be attached to the email.</p>
 
-      <label class="field-label" for="name-input">Name <span aria-hidden="true">*</span></label>
+      <label class="field-label" for="name-input">Your name <span aria-hidden="true">*</span></label>
       <input
         class="text-input"
         id="name-input"
@@ -180,7 +308,7 @@ function contactCard() {
         value="${escapeHtml(state.customer.name)}"
         required
         aria-describedby="contact-error submission-status"
-        aria-invalid="${Boolean(state.fieldError)}"
+        aria-invalid="${Boolean(state.errors.contact)}"
         ${isLoading ? "disabled" : ""}
       >
 
@@ -206,13 +334,13 @@ function contactCard() {
             value="${escapeHtml(state.customer.contact)}"
             required
             aria-describedby="contact-error submission-status"
-            aria-invalid="${Boolean(state.fieldError)}"
+            aria-invalid="${Boolean(state.errors.contact)}"
             ${isLoading ? "disabled" : ""}
           >
         </div>
       </div>
 
-      <label class="field-label" for="message-input">Message <span class="optional-label">Optional</span></label>
+      <label class="field-label message-label" for="message-input">Message <span class="optional-label">Optional</span></label>
       <textarea
         class="text-input message-input"
         id="message-input"
@@ -223,14 +351,15 @@ function contactCard() {
         ${isLoading ? "disabled" : ""}
       >${escapeHtml(state.customer.message)}</textarea>
 
-      <p class="field-error" id="contact-error">${error}</p>
+      <p class="field-error" id="contact-error">${escapeHtml(state.errors.contact || "")}</p>
       ${CONFIG.mockMode ? "" : '<div class="turnstile-wrap" id="turnstile-container" aria-label="Security verification"></div>'}
-      ${isConfigured ? "" : '<p class="configuration-note">Request delivery is not configured yet. Add the Worker URL and Turnstile site key in <code>js/config.js</code>.</p>'}
-      <p class="submission-status" id="submission-status" role="status">${submissionMessage}</p>
-      <div class="actions">
-        <button class="button button-secondary" type="button" data-action="back" ${isLoading ? "disabled" : ""}>Back</button>
+      ${isConfigured ? "" : '<p class="configuration-note">Email delivery is not configured. Add the Worker URL and Turnstile site key in <code>js/config.js</code>.</p>'}
+      <p class="submission-status" id="submission-status" role="status">${escapeHtml(state.submission.message)}</p>
+
+      <div class="actions split-actions">
+        <button class="button button-secondary" type="button" data-action="back" ${isLoading ? "disabled" : ""}><span aria-hidden="true">←</span> Back</button>
         <button class="button button-primary" id="send-csv-button" type="submit" ${isLoading || !isConfigured || needsVerification ? "disabled" : ""}>
-          ${isLoading ? '<span class="spinner" aria-hidden="true"></span>Sending…' : "Send request"}
+          ${isLoading ? '<span class="spinner" aria-hidden="true"></span>Sending…' : 'Send request <span aria-hidden="true">→</span>'}
         </button>
       </div>
     </form>`;
@@ -238,20 +367,17 @@ function contactCard() {
 
 function successCard() {
   const isMock = state.submission.result?.mode === "mock";
-  const message = isMock
-    ? "Done! The prototype submission was successful. No real email was sent."
-    : "Thanks! Your contact details and measurements have been sent.";
-
   return `
-    <section class="card" aria-labelledby="success-title">
-      <div class="success-icon" aria-hidden="true">✓</div>
-      <p class="step-kicker">Complete</p>
+    <section class="success-card" aria-labelledby="success-title">
+      <span class="success-icon" aria-hidden="true">✓</span>
+      <p class="step-kicker">ALL DONE</p>
       <h2 id="success-title" tabindex="-1">Request sent</h2>
-      <p class="card-subtitle">${message}</p>
-      ${isMock ? '<p class="success-note">Mock mode is on. Download the CSV below to verify its contents.</p>' : ""}
-      <div class="actions done-actions">
-        ${isMock ? '<button class="button button-secondary" type="button" data-action="download">Download CSV</button>' : ""}
-        <button class="button button-primary" type="button" data-action="restart">Start over</button>
+      <p class="card-subtitle">${isMock ? "The test submission was completed without sending a real email." : `Your message and ${escapeHtml(state.dog.name)}’s measurement CSV have been sent.`}</p>
+      <p class="filename">${escapeHtml(createCsvFilename(state.dog))}</p>
+      <div class="actions centered-actions">
+        <button class="button button-secondary" type="button" data-action="edit" data-step="${REVIEW_STEP}">Review details</button>
+        <button class="button button-primary" type="button" data-action="download">Download CSV <span aria-hidden="true">↓</span></button>
+        <button class="button button-link" type="button" data-action="restart">Measure another dog</button>
       </div>
     </section>`;
 }
@@ -260,22 +386,51 @@ function render({ focus = false } = {}) {
   removeTurnstileWidget();
   updateProgress();
 
-  if (state.step <= 2) app.innerHTML = measurementCard(state.step);
-  if (state.step === 3) app.innerHTML = confirmationCard();
-  if (state.step === 4) app.innerHTML = contactCard();
-  if (state.step === 5) app.innerHTML = successCard();
+  if (state.completed) {
+    app.innerHTML = successCard();
+  } else if (state.step === 0) {
+    app.innerHTML = aboutCard();
+  } else if (state.step <= MEASUREMENTS.length) {
+    app.innerHTML = measurementCard(state.step - 1);
+  } else if (state.step === REVIEW_STEP) {
+    app.innerHTML = reviewCard();
+  } else {
+    app.innerHTML = contactCard();
+  }
 
-  if (state.step === 4) renderTurnstileWidget();
+  if (!state.completed && state.step === CONTACT_STEP) renderTurnstileWidget();
 
   if (focus) {
-    app.querySelector("input, h2")?.focus();
+    app.querySelector("h2")?.focus({ preventScroll: true });
+    app.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
-function validateMeasurement(value) {
-  if (value.trim() === "") return "Enter a measurement to continue.";
-  if (!Number.isFinite(Number(value)) || Number(value) <= 0) return "Enter a number greater than zero.";
-  return "";
+function validateDog() {
+  const errors = {};
+  const name = state.dog.name.trim();
+
+  if (!name) {
+    errors.name = "Enter your dog’s name.";
+  } else if (!/^\p{L}+$/u.test(name)) {
+    errors.name = "Use letters only, without spaces or numbers.";
+  }
+
+  if (!state.dog.sex) errors.sex = "Choose your dog’s sex.";
+  if (!["cm", "inch"].includes(state.dog.unit)) errors.unit = "Choose a unit.";
+  return errors;
+}
+
+function isValidMeasurement(value) {
+  const numericValue = Number(value);
+  return value !== "" && Number.isFinite(numericValue) && numericValue > 0;
+}
+
+function allMeasurementsAreValid() {
+  return MEASUREMENTS.every(({ slug }) => {
+    const record = state.measurements[slug];
+    return isValidMeasurement(record.value) && ["cm", "inch"].includes(record.unit);
+  });
 }
 
 function formatPhone(value) {
@@ -318,14 +473,20 @@ function validateCustomer() {
   return "";
 }
 
+function saveAndDownload() {
+  const csv = generateMeasurementsCsv(state.measurements, MEASUREMENTS, state.dog.unit);
+  downloadCsv(csv, createCsvFilename(state.dog));
+}
+
 app.addEventListener("input", (event) => {
-  if (event.target.matches("#measurement-input")) {
-    state.measurements[MEASUREMENT_STEPS[state.step].key] = event.target.value;
+  if (event.target.matches("#dog-name")) state.dog.name = event.target.value;
+
+  if (event.target.matches("#measurement-value")) {
+    const measurement = MEASUREMENTS[state.step - 1];
+    state.measurements[measurement.slug].value = event.target.value;
   }
 
-  if (event.target.matches("#name-input")) {
-    state.customer.name = event.target.value;
-  }
+  if (event.target.matches("#name-input")) state.customer.name = event.target.value;
 
   if (event.target.matches("#contact-input")) {
     const value = state.customer.contactType === "phone" ? formatPhone(event.target.value) : event.target.value;
@@ -333,39 +494,76 @@ app.addEventListener("input", (event) => {
     if (event.target.value !== value) event.target.value = value;
   }
 
-  if (event.target.matches("#message-input")) {
-    state.customer.message = event.target.value;
-  }
+  if (event.target.matches("#message-input")) state.customer.message = event.target.value;
 
-  if (state.fieldError) {
-    state.fieldError = "";
+  if (event.target.matches("input, textarea")) {
     event.target.setAttribute("aria-invalid", "false");
-    const errorElement = app.querySelector(".field-error");
-    if (errorElement) errorElement.textContent = "";
+    state.errors = {};
+    app.querySelectorAll(".field-error").forEach((error) => {
+      error.textContent = "";
+    });
   }
 });
 
 app.addEventListener("change", (event) => {
-  if (!event.target.matches("#contact-type")) return;
-  state.customer.contactType = event.target.value;
-  state.customer.contact = "";
-  state.fieldError = "";
-  render({ focus: true });
+  if (event.target.name === "sex") state.dog.sex = event.target.value;
+  if (event.target.name === "mainUnit") state.dog.unit = event.target.value;
+
+  if (event.target.name === "measurementUnit") {
+    const measurement = MEASUREMENTS[state.step - 1];
+    state.measurements[measurement.slug].unit = event.target.value;
+  }
+
+  if (event.target.matches("#contact-type")) {
+    state.customer.contactType = event.target.value;
+    state.customer.contact = "";
+    state.turnstileToken = "";
+    state.submission = { status: "idle", message: "", result: null };
+    state.errors = {};
+    render({ focus: true });
+    return;
+  }
+
+  state.errors = {};
+  app.querySelectorAll(".field-error").forEach((error) => {
+    error.textContent = "";
+  });
 });
 
 app.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  if (event.target.id === "step-form") {
-    const current = MEASUREMENT_STEPS[state.step];
-    state.fieldError = validateMeasurement(state.measurements[current.key]);
+  if (event.target.id === "about-form") {
+    state.dog.name = state.dog.name.trim();
+    state.errors = validateDog();
 
-    if (state.fieldError) {
+    if (Object.keys(state.errors).length) {
       render();
-      app.querySelector("input")?.focus();
+      app.querySelector("[aria-invalid='true']")?.focus();
       return;
     }
 
+    Object.values(state.measurements).forEach((record) => {
+      if (!record.value) record.unit = state.dog.unit;
+    });
+    state.step = 1;
+    render({ focus: true });
+    return;
+  }
+
+  if (event.target.id === "measurement-form") {
+    const measurement = MEASUREMENTS[state.step - 1];
+    const record = state.measurements[measurement.slug];
+    record.unit = event.target.elements.measurementUnit.value;
+
+    if (!isValidMeasurement(record.value)) {
+      state.errors = { measurement: "Enter a measurement greater than 0." };
+      render();
+      app.querySelector("#measurement-value")?.focus();
+      return;
+    }
+
+    state.errors = {};
     state.step += 1;
     render({ focus: true });
     return;
@@ -375,15 +573,16 @@ app.addEventListener("submit", async (event) => {
     state.customer.name = event.target.elements.name.value.trim();
     state.customer.contact = event.target.elements.contact.value.trim();
     state.customer.message = event.target.elements.message.value.trim();
-    state.fieldError = validateCustomer();
+    const customerError = validateCustomer();
+    state.errors = customerError ? { contact: customerError } : {};
 
     if (!CONFIG.mockMode && !state.turnstileToken) {
-      state.fieldError = state.fieldError || "Complete the security verification before sending.";
+      state.errors.contact = state.errors.contact || "Complete the security verification before sending.";
     }
 
-    if (state.fieldError) {
+    if (state.errors.contact) {
       render();
-      app.querySelector("input")?.focus();
+      app.querySelector("[aria-invalid='true']")?.focus();
       return;
     }
 
@@ -391,15 +590,17 @@ app.addEventListener("submit", async (event) => {
     render();
 
     try {
-      const csv = generateMeasurementsCsv(state.measurements, state.customer);
+      const filename = createCsvFilename(state.dog);
+      const csv = generateMeasurementsCsv(state.measurements, MEASUREMENTS, state.dog.unit);
       const result = await sendCsv({
         customer: state.customer,
         csv,
+        filename,
         turnstileToken: state.turnstileToken,
         config: CONFIG
       });
       state.submission = { status: "success", message: "", result };
-      state.step = 5;
+      state.completed = true;
       render({ focus: true });
     } catch (error) {
       state.turnstileToken = "";
@@ -414,28 +615,43 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("click", (event) => {
-  const action = event.target.closest("[data-action]")?.dataset.action;
-  if (!action) return;
+  const control = event.target.closest("[data-action]");
+  if (!control) return;
+
+  const action = control.dataset.action;
 
   if (action === "back") {
-    state.fieldError = "";
+    state.errors = {};
     state.turnstileToken = "";
     state.submission = { status: "idle", message: "", result: null };
     state.step = Math.max(0, state.step - 1);
     render({ focus: true });
   }
 
-  if (action === "confirm") {
-    state.step = 4;
+  if (action === "edit") {
+    state.errors = {};
+    state.completed = false;
+    state.step = Number(control.dataset.step);
     render({ focus: true });
   }
 
-  if (action === "download") {
-    downloadCsv(generateMeasurementsCsv(state.measurements, state.customer));
+  if (action === "confirm") {
+    if (!allMeasurementsAreValid() || Object.keys(validateDog()).length) {
+      state.errors = { form: "Some required details are missing or invalid. Please review your entries." };
+      state.step = REVIEW_STEP;
+      render({ focus: true });
+      return;
+    }
+
+    state.errors = {};
+    state.step = CONTACT_STEP;
+    render({ focus: true });
   }
 
+  if (action === "download") saveAndDownload();
+
   if (action === "restart") {
-    state = initialState();
+    state = createInitialState();
     render({ focus: true });
   }
 });

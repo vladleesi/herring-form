@@ -72,6 +72,10 @@ function arrayBufferToBase64(buffer) {
 
 async function sendEmail(submission, file, env) {
   const content = arrayBufferToBase64(await file.arrayBuffer());
+  const sanitizedFilename = String(file.name || "measurements.csv")
+    .replace(/[\\/\r\n"]/g, "_")
+    .slice(0, 180);
+  const filename = sanitizedFilename || "measurements.csv";
   const message = submission.message || "No message provided.";
   const text = [
     "New measurement request",
@@ -97,7 +101,7 @@ async function sendEmail(submission, file, env) {
       to: [env.RECIPIENT_EMAIL],
       subject: env.EMAIL_SUBJECT || "New measurement request",
       text,
-      attachments: [{ filename: "measurements.csv", content }]
+      attachments: [{ filename, content }]
     })
   });
 

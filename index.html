@@ -3,34 +3,43 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Submit measurements and contact details in one simple request.">
-    <title>Measure &amp; Send</title>
+    <meta name="description" content="A guided form for recording your dog's measurements and downloading them as a CSV file.">
+    <title>Dog measurement guide</title>
     <link rel="stylesheet" href="./css/styles.css">
   </head>
   <body>
     <main class="page-shell">
-      <header class="brand" aria-label="Measure and Send">
+      <header class="brand" aria-label="Dog measurement guide">
         <span class="brand-mark" aria-hidden="true">M</span>
-        <span>Measure &amp; Send</span>
-        <span class="prototype-badge">Request form</span>
+        <span>Measure your dog</span>
       </header>
 
-      <section class="form-layout" aria-labelledby="page-title">
-        <div class="intro">
-          <p class="eyebrow">MEASUREMENT FORM</p>
-          <h1 id="page-title">A few details,<br><span>one clear request.</span></h1>
-          <p>Enter your measurements, review them, and leave your contact details.</p>
-        </div>
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">TAILORED FIT STARTS HERE</p>
+        <h1 id="page-title">Every measurement,<br><span>made simple.</span></h1>
+        <p>Follow the illustrated steps to create a complete measurement file for your dog.</p>
+      </section>
 
-        <div class="form-column">
-          <nav class="progress" aria-label="Form progress">
-            <p class="progress-mobile" id="progress-mobile">Step 1 of 5</p>
-            <ol class="progress-list" id="progress-list"></ol>
-          </nav>
+      <section class="form-shell" aria-label="Dog measurement form">
+        <nav class="progress" aria-label="Form progress">
+          <div class="progress-copy">
+            <p id="progress-step">Step 1 of 23</p>
+            <p id="progress-label">About your dog</p>
+          </div>
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-valuemin="1"
+            aria-valuemax="23"
+            aria-valuenow="1"
+            aria-labelledby="progress-step progress-label"
+          >
+            <span id="progress-fill"></span>
+          </div>
+        </nav>
 
-          <div id="app" aria-live="polite"></div>
-          <noscript>This form requires JavaScript to work.</noscript>
-        </div>
+        <div id="app" aria-live="polite"></div>
+        <noscript>This form requires JavaScript to work.</noscript>
       </section>
     </main>
 

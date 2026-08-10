@@ -4,13 +4,13 @@ function wait(duration) {
   return new Promise((resolve) => window.setTimeout(resolve, duration));
 }
 
-export async function sendCsv({ customer, csv, turnstileToken, config }) {
+export async function sendCsv({ customer, csv, filename, turnstileToken, config }) {
   if (config.mockMode) {
     await wait(MOCK_DELAY_MS);
     return { delivered: false, mode: "mock" };
   }
 
-  const csvFile = new File([csv], "measurements.csv", {
+  const csvFile = new File([csv], filename || "measurements.csv", {
     type: "text/csv;charset=utf-8"
   });
   const body = new FormData();

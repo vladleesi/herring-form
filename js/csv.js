@@ -8,16 +8,15 @@ function escapeCsvValue(value) {
   return text;
 }
 
-export function generateMeasurementsCsv(measurements, customer = {}) {
+export function generateMeasurementsCsv(measurements, definitions, mainUnit) {
   const rows = [
-    ["field", "value", "unit"],
-    ["name", customer.name || "", ""],
-    ["contact_type", customer.contactType || "", ""],
-    ["contact", customer.contact || "", ""],
-    ["message", customer.message || "", ""],
-    ["length", measurements.length, "cm"],
-    ["width", measurements.width, "cm"],
-    ["height", measurements.height, "cm"]
+    ["Name", `Calculated value (${mainUnit})`, "Full name", `Formula (${mainUnit})`],
+    ...definitions.map(({ name, slug, fullName }) => [
+      name,
+      measurements[slug].value,
+      fullName,
+      ""
+    ])
   ];
 
   return rows
@@ -25,8 +24,15 @@ export function generateMeasurementsCsv(measurements, customer = {}) {
     .join("\r\n");
 }
 
-export function downloadCsv(csv, filename = "measurements.csv") {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+export function createCsvFilename(dog, date = new Date()) {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${dog.name}_${dog.sex}_${year}${month}${day}.csv`;
+}
+
+export function downloadCsv(csv, filename) {
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
 
