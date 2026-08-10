@@ -6,7 +6,7 @@ A responsive, framework-free wizard for collecting a dog's measurements and down
 
 1. Enter the dog's name, sex, and main unit.
 2. Complete one illustrated step for each of the 20 measurements. Step order follows the numeric image prefixes.
-3. Review the dog details, values, and per-measurement units.
+3. Review the dog details and values. Every measurement uses the main unit selected on the first step.
 4. Confirm the measurements, add contact details and an optional message, then send the request by email.
 5. Download `[Dog_name]_[Sex]_[YYYYMMDD].csv` from the success screen when needed.
 

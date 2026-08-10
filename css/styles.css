@@ -342,8 +342,20 @@ button:disabled {
 
 .measurement-input-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 168px;
+  grid-template-columns: minmax(0, 1fr) 92px;
   gap: 10px;
+}
+
+.fixed-unit {
+  display: grid;
+  min-height: 58px;
+  padding: 9px 13px;
+  place-items: center;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+  font-weight: 800;
 }
 
 .unit-choice {
@@ -678,7 +690,7 @@ button:disabled {
   }
 
   .measurement-input-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) 76px;
   }
 
   .contact-grid {

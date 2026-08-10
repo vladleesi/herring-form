@@ -209,7 +209,6 @@ function aboutCard() {
 function measurementCard(measurementIndex) {
   const measurement = MEASUREMENTS[measurementIndex];
   const record = state.measurements[measurement.slug];
-  const selectedUnit = record.unit || state.dog.unit;
 
   return `
     <form class="step-card" id="measurement-form" novalidate>
@@ -225,18 +224,16 @@ function measurementCard(measurementIndex) {
             class="number-input"
             id="measurement-value"
             name="measurementValue"
-            type="number"
-            min="0"
-            step="any"
+            type="text"
             inputmode="decimal"
             autocomplete="off"
-            placeholder="0.0"
+            placeholder="14.5"
             value="${escapeHtml(record.value)}"
             aria-invalid="${Boolean(state.errors.measurement)}"
             aria-describedby="measurement-error"
             required
           >
-          ${unitOptions("measurementUnit", selectedUnit)}
+          <span class="fixed-unit" aria-label="Measurement unit">${escapeHtml(state.dog.unit)}</span>
         </div>
         <p class="field-error" id="measurement-error">${escapeHtml(state.errors.measurement || "")}</p>
 
@@ -421,9 +418,14 @@ function validateDog() {
   return errors;
 }
 
+function normalizeMeasurementValue(value) {
+  return String(value).trim().replace(",", ".");
+}
+
 function isValidMeasurement(value) {
-  const numericValue = Number(value);
-  return value !== "" && Number.isFinite(numericValue) && numericValue > 0;
+  const normalizedValue = normalizeMeasurementValue(value);
+  const numericValue = Number(normalizedValue);
+  return /^\d+(?:\.\d+)?$/.test(normalizedValue) && Number.isFinite(numericValue) && numericValue > 0;
 }
 
 function allMeasurementsAreValid() {
@@ -509,11 +511,6 @@ app.addEventListener("change", (event) => {
   if (event.target.name === "sex") state.dog.sex = event.target.value;
   if (event.target.name === "mainUnit") state.dog.unit = event.target.value;
 
-  if (event.target.name === "measurementUnit") {
-    const measurement = MEASUREMENTS[state.step - 1];
-    state.measurements[measurement.slug].unit = event.target.value;
-  }
-
   if (event.target.matches("#contact-type")) {
     state.customer.contactType = event.target.value;
     state.customer.contact = "";
@@ -544,7 +541,7 @@ app.addEventListener("submit", async (event) => {
     }
 
     Object.values(state.measurements).forEach((record) => {
-      if (!record.value) record.unit = state.dog.unit;
+      record.unit = state.dog.unit;
     });
     state.step = 1;
     render({ focus: true });
@@ -554,7 +551,7 @@ app.addEventListener("submit", async (event) => {
   if (event.target.id === "measurement-form") {
     const measurement = MEASUREMENTS[state.step - 1];
     const record = state.measurements[measurement.slug];
-    record.unit = event.target.elements.measurementUnit.value;
+    record.unit = state.dog.unit;
 
     if (!isValidMeasurement(record.value)) {
       state.errors = { measurement: "Enter a measurement greater than 0." };
@@ -563,6 +560,7 @@ app.addEventListener("submit", async (event) => {
       return;
     }
 
+    record.value = normalizeMeasurementValue(record.value);
     state.errors = {};
     state.step += 1;
     render({ focus: true });
