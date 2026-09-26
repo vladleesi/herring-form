@@ -81,16 +81,22 @@ Non-sensitive settings belong in `vars`. Do not put API keys, Turnstile secret k
 
 ### 2. Configure the frontend
 
-Edit the `production` object in `js/config.js`:
+Create the production Turnstile widget with every real frontend hostname and no local development hostnames. A Turnstile sitekey and Worker URL are public but deployment-specific, so the repository keeps placeholders instead of binding forks to one deployment.
 
-- Replace `https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev/api/send-csv` with the deployed Worker endpoint.
-- Replace `YOUR_TURNSTILE_SITE_KEY` with your production Turnstile sitekey. A sitekey is public but deployment-specific.
+For GitHub Pages, add these repository variables under **Settings → Secrets and variables → Actions → Variables**:
 
-Make the same Worker-host replacement in the `connect-src` directive in `index.html`. Keeping an exact host in the Content Security Policy prevents the frontend from sending data to arbitrary Worker endpoints.
+- `WORKER_API_URL`: the complete deployed endpoint, such as `https://your-worker.your-subdomain.workers.dev/api/send-csv`;
+- `TURNSTILE_SITE_KEY`: the production widget sitekey.
 
-For a production-only branch, you may also remove the two local `http://...:8787` entries from `connect-src`. They are present in the template so the same checkout can run the local Worker.
+The Pages workflow runs `scripts/build-site.mjs`. It validates both values, writes them to the deployment artifact's `js/deployment-config.js`, and replaces the Worker placeholder in the artifact's Content Security Policy. The values are never added to the Git commit.
 
-Create the production Turnstile widget with every real frontend hostname and no local development hostnames.
+For another static host, provide the same environment variables and run:
+
+```bash
+node scripts/build-site.mjs
+```
+
+Publish the generated `_site/` directory. It is ignored by Git.
 
 ### 3. Add production secrets
 
@@ -112,17 +118,18 @@ Deploy the production Worker:
 npm run deploy
 ```
 
-The deployed URL printed by Wrangler must match both `js/config.js` and the frontend Content Security Policy.
+The deployed URL printed by Wrangler must match the frontend deployment variable `WORKER_API_URL`.
 
 ### 4. Publish the frontend
 
 Any static host works. For GitHub Pages:
 
-1. Open **Settings → Pages** in your fork.
-2. Select **Deploy from a branch**, choose the production branch and `/(root)`, and save.
-3. If using a custom domain, configure and verify it, enable HTTPS, and keep the generated `CNAME` file.
-4. Add the final origin to the Worker's `ALLOWED_ORIGINS` and the Turnstile widget.
-5. Submit one real request before announcing the site.
+1. Add the two repository variables described above.
+2. Open **Settings → Pages** and select **GitHub Actions** as the publishing source.
+3. Push to `main` or manually run the **Deploy GitHub Pages** workflow.
+4. If using a custom domain, configure and verify it in the Pages settings and enable HTTPS.
+5. Add the final origin to the Worker's `ALLOWED_ORIGINS` and the Turnstile widget.
+6. Submit one real request before announcing the site.
 
 Relative asset paths support GitHub Pages project URLs such as `/herring-form/`.
 
@@ -137,8 +144,8 @@ Relative asset paths support GitHub Pages project URLs such as `/herring-form/`.
 | `TURNSTILE_SECRET_KEY` | Cloudflare secret / local `.dev.vars.dev` | Yes | Validates Turnstile tokens |
 | `RECIPIENT_EMAIL` | Cloudflare secret | Yes | Receives submitted measurement files |
 | `SENDER_EMAIL` | Cloudflare secret | Yes | Verified sender identity |
-| Worker API URL | `js/config.js` and `index.html` CSP | No | Submission endpoint |
-| Turnstile sitekey | `js/config.js` | No | Public browser widget identifier |
+| `WORKER_API_URL` | Deployment environment / GitHub variable | No | Submission endpoint and generated CSP origin |
+| `TURNSTILE_SITE_KEY` | Deployment environment / GitHub variable | No | Public browser widget identifier |
 
 Cloudflare supports declaring required secret names in `wrangler.jsonc`; values remain in local ignored environment files or encrypted Worker secrets. See [Cloudflare Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
 

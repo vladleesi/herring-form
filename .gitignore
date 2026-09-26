@@ -2,6 +2,7 @@
 node_modules/
 coverage/
 dist/
+_site/
 .wrangler/
 
 # Local environment files and secrets
