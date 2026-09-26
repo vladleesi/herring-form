@@ -1,9 +1,21 @@
-worker/.wrangler/
-worker/.dev.vars
-worker/.env
-worker/node_modules/
+# Dependencies and generated output
+node_modules/
+coverage/
+dist/
+.wrangler/
+
+# Local environment files and secrets
 .env
 .env.*
-!.env.example
-!**/.env.example
-!worker/.dev.vars.example
+.dev.vars
+.dev.vars.*
+secrets*.json
+!*.example
+!**/*.example
+
+# Logs and editor/OS files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,98 +1,178 @@
-# Dog measurement guide
+# Dog Measurement Guide
 
-A responsive, framework-free wizard for collecting a dog's measurements, sending the completed request by email, and downloading it as a CSV file.
+A responsive, framework-free wizard for collecting a dog's measurements, emailing the completed request, and downloading the measurements as CSV.
 
-## Form flow
+The browser application is static HTML, CSS, and JavaScript. Email delivery is handled by a Cloudflare Worker, protected by Turnstile, an exact-origin allowlist, request validation, and rate limiting. Resend is the default email provider.
 
-1. Enter the dog's name, sex, and main unit.
-2. Complete one illustrated step for each of the 20 measurements. Step order follows the numeric image prefixes.
-3. Review the dog details and values. Every measurement uses the main unit selected on the first step.
-4. Add contact details and an optional message, then send the request by email.
-5. Download `[Dog_name]_[Sex]_[YYYYMMDD].csv` from the success screen when needed.
+## Features
 
-The CSV contains exactly four columns: `Name`, `Calculated value ([Unit])`, `Full name`, and `Formula ([Unit])`. The `Formula` values are empty.
+- Guided flow for 20 illustrated measurements
+- Centimetre and inch support
+- Review and CSV download
+- Optional email delivery through a separately deployed Worker
+- Local mock delivery that never calls Resend
+- Server-side validation, bounded uploads, CORS, Turnstile, and per-contact rate limiting
+- No build step for the frontend
 
-## Run locally
+## Repository layout
 
-Requirements: Node.js 18 or newer. No package installation is needed.
+| Path | Purpose |
+| --- | --- |
+| `index.html`, `css/`, `js/` | Static frontend |
+| `public/images/measurements/` | Paired desktop/mobile measurement illustrations |
+| `dev-server.mjs` | Dependency-free local static server |
+| `worker/` | Cloudflare Worker, configuration, and security tests |
+
+## Requirements
+
+- Node.js 22 or newer (required by current Wrangler releases)
+- A Cloudflare account for deployment
+- A Resend account and verified sending domain for live email
+- A production Turnstile widget
+
+The repository contains no reusable hosted service, account, domain, email address, or credential. Every fork must configure and deploy its own resources.
+
+## Local development
+
+Clone your fork and install the Worker development dependency:
 
 ```bash
-git clone https://github.com/vladleesi/herring-form.git
-cd herring-form
+git clone https://github.com/your-github-username/herring-form.git
+cd herring-form/worker
+npm install
+```
+
+Create the ignored development secret file from the template:
+
+```bash
+cp .dev.vars.example .dev.vars.dev
+```
+
+On PowerShell, use `Copy-Item .dev.vars.example .dev.vars.dev` instead. Replace the placeholder in `.dev.vars.dev` with Cloudflare's documented always-pass **test secret**. The matching public test sitekey is already limited to the development configuration in `js/config.js`.
+
+Start the local Worker:
+
+```bash
+npm run dev
+```
+
+In another terminal, start the frontend from the repository root:
+
+```bash
 node dev-server.mjs
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765). Stop the server with `Ctrl+C`.
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The frontend calls the Worker at `http://127.0.0.1:8787`. The `dev` Worker environment validates Turnstile and returns a mock success without contacting Resend.
 
-The frontend selects its configuration automatically. On `127.0.0.1` or `localhost` it calls the isolated `measurement-email-api-dev` Worker with Cloudflare's public always-pass Turnstile test sitekey. On every other hostname it uses the production Worker and production sitekey. No source-file switching is required.
+Cloudflare publishes its testing keys for development and automated tests. Never use them in production. See [Test your Turnstile implementation](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
 
-Set up the development Worker once. Use Cloudflare's documented always-pass Turnstile test secret when Wrangler prompts for `TURNSTILE_SECRET_KEY`:
+## Deploy your own copy
+
+### 1. Configure the Worker
+
+Edit `worker/wrangler.jsonc`:
+
+- Choose Worker names for the default and `dev` environments.
+- Replace `ALLOWED_ORIGINS` with the exact origins that host your frontend. Origins contain a scheme and hostname, plus a port when non-default, but no path or trailing slash.
+- Replace rate-limit namespace IDs `1001` and `1002` if either is already used in your Cloudflare account. Each value must be a positive integer encoded as a string and should be unique when counters must remain separate.
+- Optionally change `EMAIL_SUBJECT`.
+
+Non-sensitive settings belong in `vars`. Do not put API keys, Turnstile secret keys, or email addresses there.
+
+### 2. Configure the frontend
+
+Edit the `production` object in `js/config.js`:
+
+- Replace `https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev/api/send-csv` with the deployed Worker endpoint.
+- Replace `YOUR_TURNSTILE_SITE_KEY` with your production Turnstile sitekey. A sitekey is public but deployment-specific.
+
+Make the same Worker-host replacement in the `connect-src` directive in `index.html`. Keeping an exact host in the Content Security Policy prevents the frontend from sending data to arbitrary Worker endpoints.
+
+For a production-only branch, you may also remove the two local `http://...:8787` entries from `connect-src`. They are present in the template so the same checkout can run the local Worker.
+
+Create the production Turnstile widget with every real frontend hostname and no local development hostnames.
+
+### 3. Add production secrets
+
+From `worker/`, authenticate and set each value through Wrangler's interactive prompt:
 
 ```bash
-cd worker
-wrangler secret put TURNSTILE_SECRET_KEY --env dev
-wrangler deploy --env dev
-cd ..
-node dev-server.mjs
+npx wrangler login
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put TURNSTILE_SECRET_KEY
+npx wrangler secret put RECIPIENT_EMAIL
+npx wrangler secret put SENDER_EMAIL
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The development Worker validates the request with Cloudflare's always-pass test secret, returns a mock success, and never calls Resend. Cloudflare's dummy response uses synthetic action and hostname metadata, so exact action and hostname matching remains a production-only check; the dev Worker still enforces its local Origin allowlist. It allows `http://127.0.0.1:8765` and `http://localhost:8765`; neither is part of the production allowlist.
+`SENDER_EMAIL` can include a display name, such as `Measure & Send <no-reply@example.com>`. The sender domain must be verified with Resend. Secret values must never be passed as command-line arguments, added to `wrangler.jsonc`, or committed to Git.
 
-## Configure your own deployment
-
-Forks and derived deployments must use their own service configuration. The original hosted Worker, email addresses, domains, Turnstile widget, and API credentials are not reusable project resources.
-
-1. Create your own Resend API key and verified sending domain.
-2. Create your own production Cloudflare Turnstile widget with only the production frontend hostnames. Local development uses Cloudflare's public test keys instead of the production widget.
-3. Update `worker/wrangler.jsonc`:
-   - replace `ALLOWED_ORIGINS` with the exact frontend origins, without paths;
-   - optionally change `EMAIL_SUBJECT` and the Worker `name`;
-   - choose rate-limit namespace IDs that are unique within your Cloudflare account.
-4. Authenticate Wrangler and add all server-only values as secrets. `SENDER_EMAIL` may include a display name, for example `Measure & Send <no-reply@example.com>`:
+Deploy the production Worker:
 
 ```bash
-cd worker
-wrangler login
-wrangler secret put RESEND_API_KEY
-wrangler secret put TURNSTILE_SECRET_KEY
-wrangler secret put RECIPIENT_EMAIL
-wrangler secret put SENDER_EMAIL
-wrangler deploy
+npm run deploy
 ```
 
-5. Copy the deployed Worker URL and the public Turnstile sitekey into `js/config.js`.
+The deployed URL printed by Wrangler must match both `js/config.js` and the frontend Content Security Policy.
 
-Never place the Resend API key, Turnstile secret key, recipient email, or sender email in frontend code or committed configuration. They are Cloudflare Worker secrets. The real `.dev.vars` file is ignored by Git; only the placeholder `.dev.vars.example` is tracked.
+### 4. Publish the frontend
 
-Deploy production explicitly with `wrangler deploy --env=""`. The production API uses `https://measurement-email-api.vladleesi.workers.dev/api/send-csv`; it remains protected by the exact-origin allowlist, Turnstile hostname and action validation, per-contact rate limiting, bounded multipart parsing, strict CSV validation, upstream timeouts, and server-side input validation. Worker observability is enabled, but request contents and provider response bodies are not written to application logs.
+Any static host works. For GitHub Pages:
 
-## GitHub Pages
+1. Open **Settings → Pages** in your fork.
+2. Select **Deploy from a branch**, choose the production branch and `/(root)`, and save.
+3. If using a custom domain, configure and verify it, enable HTTPS, and keep the generated `CNAME` file.
+4. Add the final origin to the Worker's `ALLOWED_ORIGINS` and the Turnstile widget.
+5. Submit one real request before announcing the site.
 
-The frontend is static and has no build step. It can be published from the repository root with GitHub Pages, and its relative asset URLs support project paths such as `/herring-form/`.
+Relative asset paths support GitHub Pages project URLs such as `/herring-form/`.
 
-For production:
+## Configuration reference
 
-1. In GitHub, open **Settings → Pages**.
-2. Under **Build and deployment**, select **Deploy from a branch**, choose the production branch and `/(root)`, then save.
-3. If using a custom domain, configure it in the same Pages screen, verify the domain for the GitHub account, and enable **Enforce HTTPS**. Keep the Pages-generated `CNAME` file if the site publishes from a branch.
-4. Ensure every real frontend hostname is present in both production `ALLOWED_ORIGINS` and the production Turnstile widget. Do not add `localhost` or `127.0.0.1` to production.
-5. Set all four production Worker secrets, deploy the Worker with `wrangler deploy --env=""`, and test one real submission before announcing the site.
+| Name | Location | Secret | Purpose |
+| --- | --- | --- | --- |
+| `DELIVERY_MODE` | `wrangler.jsonc` | No | `live` in production, `mock` in development |
+| `EMAIL_SUBJECT` | `wrangler.jsonc` | No | Subject for delivered messages |
+| `ALLOWED_ORIGINS` | `wrangler.jsonc` | No | Comma-separated exact frontend origins |
+| `RESEND_API_KEY` | Cloudflare secret | Yes | Authenticates Resend requests |
+| `TURNSTILE_SECRET_KEY` | Cloudflare secret / local `.dev.vars.dev` | Yes | Validates Turnstile tokens |
+| `RECIPIENT_EMAIL` | Cloudflare secret | Yes | Receives submitted measurement files |
+| `SENDER_EMAIL` | Cloudflare secret | Yes | Verified sender identity |
+| Worker API URL | `js/config.js` and `index.html` CSP | No | Submission endpoint |
+| Turnstile sitekey | `js/config.js` | No | Public browser widget identifier |
 
-The page includes a restrictive Content Security Policy suitable for the current same-origin assets, Turnstile, and the two configured Worker endpoints. Update the policy in `index.html` together with `js/config.js` if an endpoint or required third-party resource changes.
+Cloudflare supports declaring required secret names in `wrangler.jsonc`; values remain in local ignored environment files or encrypted Worker secrets. See [Cloudflare Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
 
-The form collects a name, contact details, an optional message, and dog measurements. The UI tells visitors that Cloudflare and Resend process this data for email delivery. Add the site's full privacy notice and retention/contact details if required for the jurisdiction and intended audience.
+## Tests and validation
 
-Run the Worker security tests without installing dependencies:
+Run the Worker tests:
 
 ```bash
 cd worker
 npm test
 ```
 
-## Images
+Validate a production bundle without deploying:
 
-Source images live in `public/images/measurements/`. Desktop/mobile files are paired by their numeric prefixes, and those prefixes define the form order.
+```bash
+npm run check
+```
+
+The security tests cover valid mock submissions, origin rejection, CSV formula-injection rejection, and request-size limits.
+
+## Data and privacy
+
+The form collects a person's name, contact details, optional message, and dog measurements. Cloudflare and Resend process this data for delivery. A public deployment should provide a privacy notice describing its controller, purpose, retention period, processors, and contact method as required by the applicable jurisdiction.
+
+Worker application logs intentionally omit request bodies, contact details, CSV contents, and provider response bodies. Review platform-level logging and retention settings before launch.
+
+## Measurement images
+
+Desktop and mobile files in `public/images/measurements/` are paired by numeric prefixes. Those prefixes define the form order, so preserve the numbering when replacing an illustration.
+
+## Contributing and security
+
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
 
 ## License
 
-The source code is available under the [MIT License](LICENSE). The license does not grant access to the original hosted services, credentials, email accounts, or domains; derived deployments need their own configuration.
+Unless noted otherwise, the repository contents are released under the [MIT License](LICENSE). The license does not grant access to any third-party account or hosted resource.
